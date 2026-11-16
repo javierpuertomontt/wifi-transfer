@@ -150,6 +150,19 @@
                     <TextBlock Text="CARPETA DE DESCARGAS" FontSize="10" Foreground="{DynamicResource MutedForeground}" Margin="6,0,0,6"/>
                     <TextBlock x:Name="DestinationLabel" TextWrapping="Wrap" FontSize="11" Margin="6,0" Foreground="{DynamicResource AppForeground}"/>
                     <Separator Margin="8,16"/>
+                    <TextBlock Text="CACHÉ DE MINIATURAS" FontSize="10" Foreground="{DynamicResource MutedForeground}" Margin="6,0,0,8"/>
+                    <TextBlock x:Name="CacheUsageLabel" Text="Calculando…" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource AppForeground}" Margin="6,0,0,5"/>
+                    <Button x:Name="CacheClearButton" Content="🗑  Limpiar caché" Click="CacheClear_Click"
+                            HorizontalContentAlignment="Left" ToolTip="Elimina miniaturas guardadas en el notebook, sin borrar fotografías originales"/>
+                    <Button Content="Actualizar tamaño" Click="CacheRefresh_Click"
+                            HorizontalContentAlignment="Left" ToolTip="Volver a calcular el espacio ocupado"/>
+                    <Separator Margin="8,12"/>
+                    <TextBlock Text="DIAGNÓSTICO" FontSize="10" Foreground="{DynamicResource MutedForeground}" Margin="6,0,0,6"/>
+                    <Button x:Name="ViewThumbnailErrorsButton" Content="Ver errores de miniaturas" Click="ViewThumbnailErrors_Click"
+                            HorizontalContentAlignment="Left" ToolTip="Abre el informe local de los archivos que fallaron"
+                            IsEnabled="False"/>
+                    <Separator Margin="8,16"/>
                     <TextBlock Text="Consejos" FontWeight="SemiBold" Margin="6,0,0,8"/>
                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedForeground}" Margin="6,0" Text="Marca casillas para elegir varios archivos. Shift permite seleccionar intervalos. Arrastra archivos desde Windows para subir o desde aquí para descargarlos. Puedes generar todas las miniaturas sin desplazarte."/>
                 </StackPanel>

@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<TransferJob> _jobs = [];
     private readonly SemaphoreSlim _transfers = new(2, 2);
     private readonly HashSet<string> _loadingThumbnails = new(StringComparer.Ordinal);
+    private int _thumbsSinceCacheRefresh;
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private readonly DispatcherTimer _scrollTimer = new() { Interval = TimeSpan.FromMilliseconds(280) };
     private CancellationTokenSource _navigation = new();
@@ -50,6 +51,7 @@ public partial class MainWindow : Window
         DestinationLabel.Text = _destination;
         LoadSettings();
         InitializeFeatures();
+        InitializeCacheControls();
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RefreshView(); };
         _scrollTimer.Tick += (_, _) => { _scrollTimer.Stop(); RequestVisibleThumbnails(); };
         TileRowsList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(GridScrolled));
@@ -190,6 +192,7 @@ public partial class MainWindow : Window
 
     private void ResetNavigation()
     {
+        _suspendAutoThumbnails = false;
         StopPreload();
         _navigation.Cancel();
         _navigation.Dispose();
@@ -470,7 +473,7 @@ public partial class MainWindow : Window
 
     private void QueueThumbnail(FileEntry entry)
     {
-        if (!entry.IsImage || entry.Thumbnail is not null || entry.IsLocal != _isLocal) return;
+        if (_suspendAutoThumbnails || !entry.IsImage || entry.Thumbnail is not null || entry.IsLocal != _isLocal) return;
         if (!_isLocal && !_ftp.Connected) return;
         var key = (entry.IsLocal ? "pc|" : "ftp|") + entry.FullPath;
         if (!_loadingThumbnails.Add(key)) return;
@@ -483,7 +486,15 @@ public partial class MainWindow : Window
         try
         {
             var image = await _cache.LoadAsync(entry, _ftp, token);
-            if (!token.IsCancellationRequested && image is not null) entry.Thumbnail = image;
+            if (!token.IsCancellationRequested && image is not null)
+            {
+                entry.Thumbnail = image;
+                if (++_thumbsSinceCacheRefresh >= 25)
+                {
+                    _thumbsSinceCacheRefresh = 0;
+                    await RefreshCacheUsageAsync();
+                }
+            }
         }
         catch (OperationCanceledException) { }
         catch { /* Thumbnail failures must never block the explorer. */ }

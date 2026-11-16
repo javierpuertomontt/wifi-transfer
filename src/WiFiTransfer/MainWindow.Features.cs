@@ -155,17 +155,26 @@ public partial class MainWindow
     {
         if (_preloadCancellation is { IsCancellationRequested: false }) return;
         var photos = _visible.Where(x => x.IsImage && !x.IsDirectory).ToArray();
-        if (photos.Length == 0) { SetStatus("No hay fotografías compatibles con miniaturas en este filtro."); return; }
-        if (!_isLocal && !_ftp.Connected) { SetStatus("Conecta primero el Xiaomi."); return; }
+        if (photos.Length == 0)
+        {
+            SetStatus("No hay imágenes compatibles con miniaturas en el filtro actual.");
+            return;
+        }
+        if (!_isLocal && !_ftp.Connected)
+        {
+            SetStatus("Conecta primero el Xiaomi.");
+            return;
+        }
 
-        long estimatedBytes = photos.Where(x => !x.IsLocal && x.Size <= 25L * 1024 * 1024 && x.Size > 0).Sum(x => x.Size);
+        long estimatedBytes = photos.Where(x => !x.IsLocal && x.Size > 0 &&
+            x.Size <= ThumbnailCache.MaxRemoteThumbnailBytes).Sum(x => x.Size);
         if (estimatedBytes > 1024L * 1024 * 1024)
         {
-            var mb = FileEntry.FormatSize(estimatedBytes);
             var response = System.Windows.MessageBox.Show(this,
-                "Para generar todas las miniaturas podría ser necesario transferir hasta " + mb +
-                " desde el teléfono (menos si ya están guardadas en caché). ¿Continuar?",
-                "Cargar miniaturas", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                "Para generar miniaturas nuevas el servidor FTP podría transferir hasta " +
+                FileEntry.FormatSize(estimatedBytes) +
+                " (menos para las imágenes que ya estén en caché). ¿Continuar?",
+                "Cargar todas las miniaturas", MessageBoxButton.YesNo, MessageBoxImage.Information);
             if (response != MessageBoxResult.Yes) return;
         }
 
@@ -173,37 +182,64 @@ public partial class MainWindow
         var cancellation = new CancellationTokenSource();
         _preloadCancellation = cancellation;
         var token = cancellation.Token;
+        _suspendAutoThumbnails = false;
         PreloadButton.IsEnabled = false;
         CancelPreloadButton.Visibility = Visibility.Visible;
-        int completed = 0, omitted = 0;
+
+        int processed = 0, available = 0, reused = 0, generated = 0, skippedLarge = 0;
+        var errors = new List<string>();
         try
         {
             foreach (var photo in photos)
             {
                 token.ThrowIfCancellationRequested();
-                bool ok = false;
-                // Existing thumbnail image in RAM already counts as loaded.
-                if (photo.Thumbnail is not null) ok = true;
+
+                ThumbnailResult outcome;
+                if (photo.Thumbnail is not null)
+                    outcome = new ThumbnailResult(ThumbnailOutcome.Cached);
                 else
+                    outcome = await _cache.PrecacheDetailedAsync(photo, _ftp, token);
+
+                switch (outcome.Outcome)
                 {
-                    try { ok = await _cache.PrecacheAsync(photo, _ftp, token); }
-                    catch (OperationCanceledException) { throw; }
-                    catch { /* A broken image must not interrupt other files. */ }
+                    case ThumbnailOutcome.Cached:
+                        available++;
+                        reused++;
+                        break;
+                    case ThumbnailOutcome.Generated:
+                        available++;
+                        generated++;
+                        break;
+                    case ThumbnailOutcome.TooLarge:
+                        skippedLarge++;
+                        break;
+                    default:
+                        var safeReason = outcome.Reason.Replace('\r', ' ').Replace('\n', ' ');
+                        errors.Add(photo.Name + ": " +
+                            (safeReason.Length > 280 ? safeReason[..280] : safeReason));
+                        break;
                 }
-                if (!ok) omitted++;
-                completed++;
-                PreloadProgressLabel.Text = completed.ToString("N0") + " / " + photos.Length.ToString("N0");
-                // The page remains stationary; loaded row controls read from the disk cache.
-                if (completed % 8 == 0) RequestVisibleThumbnails();
-                if (completed % 20 == 0) await Task.Yield();
+
+                processed++;
+                PreloadProgressLabel.Text = available.ToString("N0") + " listas / " +
+                    photos.Length.ToString("N0") + " · " + processed.ToString("N0") + " revisadas";
+
+                // Update visible tiles without scrolling or materializing thousands of controls.
+                if (processed % 12 == 0) RequestVisibleThumbnails();
+                if (processed % 40 == 0) await Task.Yield();
             }
+
             RequestVisibleThumbnails();
-            SetStatus("Miniaturas procesadas: " + completed.ToString("N0")
-                      + (omitted > 0 ? " · no disponibles: " + omitted.ToString("N0") : "") + ".");
+            SetStatus("Miniaturas: " + available.ToString("N0") + " disponibles (" +
+                generated.ToString("N0") + " nuevas, " + reused.ToString("N0") + " reutilizadas), " +
+                skippedLarge.ToString("N0") + " omitidas (>60 MB), " +
+                errors.Count.ToString("N0") + " con errores." +
+                (errors.Count > 0 ? " Consulta «Ver errores de miniaturas»." : ""));
         }
         catch (OperationCanceledException)
         {
-            SetStatus("Carga de miniaturas detenida: " + completed.ToString("N0") + " de " + photos.Length.ToString("N0") + ".");
+            SetStatus("Carga detenida: " + available.ToString("N0") + " miniaturas disponibles de " +
+                processed.ToString("N0") + " revisadas.");
         }
         finally
         {
@@ -214,6 +250,9 @@ public partial class MainWindow
                 CancelPreloadButton.Visibility = Visibility.Collapsed;
             }
             cancellation.Dispose();
+            await WritePreloadErrorsAsync(errors, available, skippedLarge);
+            await _cache.TrimCacheAsync();
+            await RefreshCacheUsageAsync();
         }
     }
 

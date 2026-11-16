@@ -29,7 +29,7 @@ El programa recuerda host, puerto y usuario en `%LOCALAPPDATA%\WiFiTransfer\conn
 - Cuadrícula de filas virtualizadas; búsqueda local en el listado de la carpeta abierta.
 - Miniaturas JPG, JPEG, PNG, BMP, GIF y TIFF, generadas bajo demanda y guardadas en caché en `%LOCALAPPDATA%\WiFiTransfer\thumbnails`.
 - Se descargan imágenes completas cuando es necesario crear su miniatura. La primera navegación por miles de fotos puede requerir tiempo: FTP no entrega miniaturas nativas.
-- El límite inicial de imágenes descargadas para miniaturas remotas es 25 MB por archivo. Otros tipos (incluyendo HEIC, PDF y videos) se muestran con iconos y se pueden transferir.
+- El límite de imágenes descargadas para miniaturas remotas es 60 MB por archivo. Otros tipos (incluyendo HEIC, PDF y videos) se muestran con iconos y se pueden transferir.
 - Una conexión de exploración, una de miniaturas y hasta dos transferencias simultáneas.
 - Las descargas usan `.wft.part`, reanudación si el servidor lo permite y comprobación de tamaño cuando FTP lo proporciona.
 - Las subidas usan sufijo temporal `.wft-upload` y cambio de nombre al terminar. No se sobrescriben archivos existentes.
@@ -57,8 +57,18 @@ El proyecto se compila automáticamente con el único workflow `.github/workflow
 
 - **Casillas de selección**: cada archivo presenta una casilla arriba a la izquierda. Un clic marca o desmarca ese archivo sin modificar las otras selecciones. Con **Shift + clic en una casilla** se selecciona el intervalo desde el último archivo marcado; también puedes seleccionar todos los elementos visibles o limpiar la selección.
 - **Agrupar por mes**: habilitado inicialmente. La carpeta se divide visualmente en secciones «Noviembre 2026», «Octubre 2026», etc. Los selectores **Año** y **Mes** permiten filtrar (por fecha de modificación que anuncia el servidor FTP; no por EXIF). Los filtros no mueven físicamente los archivos ni crean nuevas carpetas.
-- **Cargar todas las miniaturas**: recorre automáticamente las imágenes compatibles del filtro actual, las almacena en caché y muestra un contador. **No realiza scroll**. Se puede cancelar y la caché ya generada permanece disponible. Las imágenes remotas de más de 25 MB o formatos no compatibles se omiten. FTP puede necesitar transferir el contenido de cada fotografía, de modo que la primera precarga puede tardar bastante.
+- **Cargar todas las miniaturas**: recorre automáticamente las imágenes compatibles del filtro actual, las almacena en caché y muestra un contador. **No realiza scroll**. Se puede cancelar y la caché ya generada permanece disponible. Las imágenes remotas de más de 60 MB o formatos no compatibles se omiten. FTP puede necesitar transferir el contenido de cada fotografía, de modo que la primera precarga puede tardar bastante.
 - **Arrastrar hacia WiFi Transfer**: suelta archivos o carpetas del Explorador de Windows sobre el panel central de WiFi Transfer. En modo Xiaomi se suben a la carpeta remota actualmente abierta. En modo Este equipo se copian a la carpeta local actual sin sobrescribir.
 - **Arrastrar desde WiFi Transfer hacia Windows**: arrastra archivos seleccionados hacia una carpeta del Explorador de Windows. En modo local es inmediato. En modo Xiaomi es necesario **preparar una descarga temporal**: la primera vez puede tardar y, si se suelta el ratón antes de terminar, debes arrastrar de nuevo (ya estará preparado). No es posible arrastrar un archivo FTP aún no descargado con la misma inmediatez que un archivo local.
 - Los archivos temporales de arrastre quedan en `%LOCALAPPDATA%\\WiFiTransfer\\drag-cache` y se eliminan en futuros inicios cuando tienen más de dos días de antigüedad; se evita borrarlos inmediatamente para permitir que Windows termine la copia.
 - Como antes, no se sobrescriben archivos existentes sin intervención explícita. **No se ha modificado la configuración de conexión FTP.**
+
+## Versión 1.2: estado real de las miniaturas y gestión de caché
+
+- El botón **Cargar todas las miniaturas** informa cuántas están disponibles (nuevas o ya guardadas), cuántas se omiten por exceder el límite de **60 MB** y cuántas fallan por otros motivos. Un archivo procesado no se considera automáticamente una miniatura disponible.
+- Se implementan hasta **3 intentos** para cada miniatura fallida por una conexión FTP que pueda haberse interrumpido. No garantiza que una imagen dañada o formato incompatible pueda abrirse.
+- El panel izquierdo presenta **CACHÉ DE MINIATURAS**, el espacio ocupado y el número de miniaturas JPEG en el notebook, además de **Actualizar tamaño** y **Limpiar caché**.
+- Limpiar la caché muestra una confirmación, detiene la carga de miniaturas y borra las imágenes reducidas guardadas en `%LOCALAPPDATA%\\WiFiTransfer\\thumbnails`. **No elimina fotografías originales, descargas ni credenciales.** Para recuperar las miniaturas, usa **Cargar todas las miniaturas** o vuelve a actualizar la carpeta.
+- La caché es independiente de `drag-cache`, donde se preparan archivos completos para arrastrar desde el FTP hacia el Explorador de Windows.
+- Después de cada precarga se crea un diagnóstico legible, `%LOCALAPPDATA%\\WiFiTransfer\\miniaturas-errores.txt`. El botón **Ver errores de miniaturas** lo abre. El informe contiene nombres de archivo y mensajes de error; no contiene contraseñas.
+- La primera generación puede requerir transferir cada imagen por FTP. **491/491 revisadas no significa 491 miniaturas disponibles**. La información ahora distingue ambos estados.

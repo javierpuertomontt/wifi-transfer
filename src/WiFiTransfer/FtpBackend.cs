@@ -79,10 +79,33 @@ public sealed class FtpBackend : IDisposable
         await _thumbGate.WaitAsync(token);
         try
         {
-            _thumbnails ??= NewClient();
-            if (!_thumbnails.IsConnected) await _thumbnails.Connect(token);
-            var result = await _thumbnails.DownloadFile(tempPath, entry.FullPath, FtpLocalExists.Overwrite, FtpVerify.None, null, token);
-            if (result != FtpStatus.Success) throw new IOException("El servidor no entregó la imagen.");
+            // Some Android FTP servers close idle data connections. Reset the thumbnail
+            // client on transport failure and retry twice with a short backoff.
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    _thumbnails ??= NewClient();
+                    if (!_thumbnails.IsConnected) await _thumbnails.Connect(token);
+                    var result = await _thumbnails.DownloadFile(
+                        tempPath, entry.FullPath, FtpLocalExists.Overwrite, FtpVerify.None, null, token);
+                    if (result != FtpStatus.Success)
+                        throw new IOException("El servidor no entregó la imagen: " + result);
+                    if (!File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
+                        throw new IOException("La imagen llegó vacía.");
+                    return;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch
+                {
+                    try { _thumbnails?.Dispose(); } catch { }
+                    _thumbnails = null;
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                    if (attempt == 2) throw;
+                    await Task.Delay((attempt + 1) * 550, token);
+                }
+            }
         }
         finally { _thumbGate.Release(); }
     }
