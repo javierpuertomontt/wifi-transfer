@@ -17,6 +17,13 @@ namespace WiFiTransfer;
 
 public partial class MainWindow : Window
 {
+    public static readonly DependencyProperty TileWidthProperty = DependencyProperty.Register(nameof(TileWidth), typeof(double), typeof(MainWindow), new PropertyMetadata(144d));
+    public static readonly DependencyProperty TileHeightProperty = DependencyProperty.Register(nameof(TileHeight), typeof(double), typeof(MainWindow), new PropertyMetadata(150d));
+    public static readonly DependencyProperty ThumbHeightProperty = DependencyProperty.Register(nameof(ThumbHeight), typeof(double), typeof(MainWindow), new PropertyMetadata(98d));
+    public double TileWidth { get => (double)GetValue(TileWidthProperty); set => SetValue(TileWidthProperty, value); }
+    public double TileHeight { get => (double)GetValue(TileHeightProperty); set => SetValue(TileHeightProperty, value); }
+    public double ThumbHeight { get => (double)GetValue(ThumbHeightProperty); set => SetValue(ThumbHeightProperty, value); }
+
     private readonly FtpBackend _ftp = new();
     private readonly ThumbnailCache _cache = new();
     private readonly ObservableCollection<TransferJob> _jobs = [];
@@ -207,22 +214,35 @@ public partial class MainWindow : Window
         _visible = sorted.ToList();
         CountLabel.Text = _visible.Count.ToString("N0") + " elementos";
 
-        var detailed = ViewCombo.SelectedIndex is 4 or 5;
+        var mode = ViewCombo.SelectedIndex;
+        TileWidth = mode switch { 0 => 208d, 1 => 175d, 2 => 144d, 3 => 108d, _ => 144d };
+        ThumbHeight = mode switch { 0 => 160d, 1 => 124d, 2 => 98d, 3 => 70d, _ => 98d };
+        TileHeight = ThumbHeight + 54d;
+        var detailed = mode is 4 or 5;
         DetailsGrid.Visibility = detailed ? Visibility.Visible : Visibility.Collapsed;
         TileRowsList.Visibility = detailed ? Visibility.Collapsed : Visibility.Visible;
         if (detailed)
         {
+            for (var i = 1; i < DetailsGrid.Columns.Count; i++)
+                DetailsGrid.Columns[i].Visibility = mode == 4 ? Visibility.Collapsed : Visibility.Visible;
+            DetailsGrid.HeadersVisibility = mode == 4 ? DataGridHeadersVisibility.None : DataGridHeadersVisibility.Column;
             DetailsGrid.ItemsSource = _visible;
             return;
         }
         DetailsGrid.ItemsSource = null;
-        var columns = ViewCombo.SelectedIndex switch { 0 => 4, 1 => 5, 2 => 6, _ => 7 };
+        var columns = Math.Max(1, (int)(Math.Max(220, TileRowsList.ActualWidth - 26) / (TileWidth + 6)));
         var rows = new List<FileRow>();
         for (var i = 0; i < _visible.Count; i += columns)
             rows.Add(new FileRow { Files = _visible.Skip(i).Take(columns).ToList() });
         TileRowsList.ItemsSource = rows;
         _scrollTimer.Stop();
         _scrollTimer.Start();
+    }
+
+    private void TileRows_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged && IsLoaded && _entries.Count > 0 && ViewCombo.SelectedIndex < 4)
+            RefreshView();
     }
 
     private void Search_TextChanged(object sender, TextChangedEventArgs e)
@@ -260,22 +280,62 @@ public partial class MainWindow : Window
 
     private async void FileTile_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is System.Windows.Controls.Button { Tag: FileEntry { IsDirectory: true } entry })
+        if (sender is System.Windows.Controls.Button { Tag: FileEntry entry })
         {
             e.Handled = true;
-            await OpenFolderAsync(entry);
+            if (entry.IsDirectory) await OpenFolderAsync(entry);
+            else if (entry.IsImage) await OpenPreviewAsync(entry);
         }
     }
 
     private async void Details_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (DetailsGrid.SelectedItem is FileEntry { IsDirectory: true } entry) await OpenFolderAsync(entry);
+        if (DetailsGrid.SelectedItem is FileEntry entry)
+        {
+            if (entry.IsDirectory) await OpenFolderAsync(entry);
+            else if (entry.IsImage) await OpenPreviewAsync(entry);
+        }
     }
 
     private void Details_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         foreach (var item in e.RemovedItems.OfType<FileEntry>()) item.IsSelected = false;
         foreach (var item in e.AddedItems.OfType<FileEntry>()) item.IsSelected = true;
+    }
+
+    private async Task OpenPreviewAsync(FileEntry entry)
+    {
+        var image = new System.Windows.Controls.Image
+        {
+            Source = entry.Thumbnail, Stretch = Stretch.Uniform, Margin = new Thickness(14)
+        };
+        var panel = new DockPanel();
+        var title = new TextBlock
+        {
+            Text = entry.Name + "   ·   " + entry.SizeText,
+            Margin = new Thickness(18, 12, 18, 0), FontSize = 15,
+            Foreground = (Brush)System.Windows.Application.Current.Resources["AppForeground"]
+        };
+        DockPanel.SetDock(title, Dock.Top);
+        panel.Children.Add(title);
+        panel.Children.Add(image);
+        var viewer = new Window
+        {
+            Title = "Vista previa · " + entry.Name, Owner = this, Width = 1000, Height = 690,
+            MinWidth = 520, MinHeight = 350, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = (Brush)System.Windows.Application.Current.Resources["AppBackground"],
+            Content = panel
+        };
+        viewer.Show();
+        try
+        {
+            var full = await _cache.LoadPreviewAsync(entry, _ftp, CancellationToken.None);
+            if (viewer.IsVisible && full is not null) image.Source = full;
+        }
+        catch (Exception ex)
+        {
+            if (viewer.IsVisible) title.Text += "   ·   Vista ampliada no disponible: " + ex.Message;
+        }
     }
 
     private Task OpenFolderAsync(FileEntry entry) =>
@@ -432,7 +492,10 @@ public partial class MainWindow : Window
         }
         Directory.CreateDirectory(destFolder);
         var filename = Path.Combine(destFolder, SafeName(entry.Name));
-        var progress = new Progress<double>(x => { job.Progress = x; job.Status = "Descargando " + x.ToString("0") + "%"; });
+        var progress = new Progress<double>(x => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (job.Status != "Completado") { job.Progress = x; job.Status = "Descargando " + x.ToString("0") + "%"; }
+        })));
         await RetryAsync(() => _ftp.DownloadAsync(entry, filename, progress, token), token);
     }
 
@@ -448,7 +511,10 @@ public partial class MainWindow : Window
             return;
         }
         var remoteFile = FtpBackend.CombineRemote(remoteFolder, Path.GetFileName(localPath));
-        var progress = new Progress<double>(x => { job.Progress = x; job.Status = "Subiendo " + x.ToString("0") + "%"; });
+        var progress = new Progress<double>(x => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (job.Status != "Completado") { job.Progress = x; job.Status = "Subiendo " + x.ToString("0") + "%"; }
+        })));
         await RetryAsync(() => _ftp.UploadAsync(localPath, remoteFile, progress, token), token);
     }
 

@@ -8,11 +8,11 @@
     <Window.Resources>
         <DataTemplate x:Key="TileTemplate">
             <Button Click="FileTile_Click" MouseDoubleClick="FileTile_DoubleClick" Loaded="FileTile_Loaded"
-                    Tag="{Binding}" Padding="4" Margin="3" Width="135" Height="146"
+                    Tag="{Binding}" Padding="4" Margin="3" Width="{Binding TileWidth, RelativeSource={RelativeSource AncestorType=Window}}" Height="{Binding TileHeight, RelativeSource={RelativeSource AncestorType=Window}}"
                     Background="Transparent" BorderThickness="0" ToolTip="{Binding FullPath}">
                 <Border x:Name="TileOutline" CornerRadius="9" Padding="5" BorderBrush="Transparent" BorderThickness="2">
                     <StackPanel>
-                        <Border Background="{DynamicResource PanelBackground}" CornerRadius="7" Height="97" ClipToBounds="True">
+                        <Border Background="{DynamicResource PanelBackground}" CornerRadius="7" Height="{Binding ThumbHeight, RelativeSource={RelativeSource AncestorType=Window}}" ClipToBounds="True">
                             <Grid>
                                 <TextBlock Text="{Binding Icon}" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" SnapsToDevicePixels="True"/>
@@ -125,7 +125,7 @@
                         <TextBlock x:Name="CountLabel" DockPanel.Dock="Right" Text="" VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" HorizontalAlignment="Right"/>
                     </DockPanel>
                     <ListBox Grid.Row="1" x:Name="TileRowsList" ItemTemplate="{StaticResource RowTemplate}"
-                             ScrollViewer.CanContentScroll="True"
+                             SizeChanged="TileRows_SizeChanged" ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling"

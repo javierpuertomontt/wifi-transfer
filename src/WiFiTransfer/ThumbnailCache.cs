@@ -93,6 +93,30 @@ public sealed class ThumbnailCache
         }
     }
 
+    public async Task<ImageSource?> LoadPreviewAsync(FileEntry entry, FtpBackend backend, CancellationToken token)
+    {
+        if (!entry.IsImage) return null;
+        if (!entry.IsLocal && entry.Size > 100L * 1024 * 1024)
+            throw new IOException("Imagen demasiado grande para una vista ampliada remota.");
+        var source = entry.FullPath;
+        string? temporary = null;
+        try
+        {
+            if (!entry.IsLocal)
+            {
+                temporary = Path.Combine(Path.GetTempPath(), "wft-preview-" + Guid.NewGuid().ToString("N") + Path.GetExtension(entry.Name));
+                await backend.DownloadThumbAsync(entry, temporary, token);
+                source = temporary;
+            }
+            return await Task.Run<ImageSource>(() => ReadImage(source, 1600), token);
+        }
+        finally
+        {
+            if (temporary is not null)
+                try { File.Delete(temporary); } catch { }
+        }
+    }
+
     private void TrimCache()
     {
         const long cap = 1024L * 1024 * 1024;
