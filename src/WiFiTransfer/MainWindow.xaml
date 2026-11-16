@@ -8,6 +8,7 @@
     <Window.Resources>
         <DataTemplate x:Key="TileTemplate">
             <Button Click="FileTile_Click" MouseDoubleClick="FileTile_DoubleClick" Loaded="FileTile_Loaded"
+                    PreviewMouseLeftButtonDown="Tile_PreviewMouseDown" PreviewMouseMove="Tile_PreviewMouseMove"
                     Tag="{Binding}" Padding="4" Margin="3" Width="{Binding TileWidth, RelativeSource={RelativeSource AncestorType=Window}}" Height="{Binding TileHeight, RelativeSource={RelativeSource AncestorType=Window}}"
                     Background="Transparent" BorderThickness="0" ToolTip="{Binding FullPath}">
                 <Border x:Name="TileOutline" CornerRadius="9" Padding="5" BorderBrush="Transparent" BorderThickness="2">
@@ -16,6 +17,10 @@
                             <Grid>
                                 <TextBlock Text="{Binding Icon}" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" SnapsToDevicePixels="True"/>
+                                <CheckBox HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Tag="{Binding}" Click="SelectionCheck_Click" ToolTip="Marcar archivo (Shift: seleccionar intervalo)"
+                                          Width="19" Height="19" Panel.ZIndex="10"/>
                             </Grid>
                         </Border>
                         <TextBlock Text="{Binding Name}" Margin="0,7,0,0" TextTrimming="CharacterEllipsis"
@@ -30,11 +35,18 @@
             </DataTemplate.Triggers>
         </DataTemplate>
         <DataTemplate x:Key="RowTemplate">
-            <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource TileTemplate}">
+            <StackPanel>
+                <TextBlock x:Name="MonthHeader" Text="{Binding Header}" FontWeight="SemiBold" FontSize="15"
+                           Foreground="{DynamicResource AccentBrush}" Padding="9,13,5,5"/>
+                <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource TileTemplate}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Header}" Value=""><Setter TargetName="MonthHeader" Property="Visibility" Value="Collapsed"/></DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
         <DataTemplate x:Key="TransferTemplate">
             <Grid Margin="3,2">
@@ -48,6 +60,7 @@
 
     <Grid Margin="16,12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -101,7 +114,32 @@
             </DockPanel>
         </Border>
 
-        <Grid Grid.Row="2">
+        <Border Grid.Row="2" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="7" Margin="0,0,0,10">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox x:Name="GroupByMonthCheck" Content="Agrupar por mes" IsChecked="True" Margin="11,0,13,0"
+                              VerticalAlignment="Center" Click="MonthFilters_Changed"/>
+                    <TextBlock Text="Año:" VerticalAlignment="Center" Margin="4,0"/>
+                    <ComboBox x:Name="YearCombo" Width="122" Margin="3" SelectionChanged="MonthFilters_Changed"
+                              ToolTip="Filtrar por año del archivo"/>
+                    <TextBlock Text="Mes:" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <ComboBox x:Name="MonthCombo" Width="139" Margin="3" SelectionChanged="MonthFilters_Changed"
+                              ToolTip="Filtrar por mes del archivo"/>
+                    <Button Content="Seleccionar visibles" Click="SelectVisible_Click" Margin="9,3,3,3"/>
+                    <Button Content="Limpiar selección" Click="ClearSelection_Click"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="PreloadProgressLabel" Text="" VerticalAlignment="Center"
+                               Foreground="{DynamicResource MutedForeground}" Margin="6,0"/>
+                    <Button x:Name="PreloadButton" Content="Cargar todas las miniaturas" Click="Preload_Click"
+                            ToolTip="Generar y guardar en caché todas las miniaturas de las imágenes del filtro actual, sin desplazarte por la carpeta"/>
+                    <Button x:Name="CancelPreloadButton" Content="Cancelar" Click="CancelPreload_Click"
+                            Visibility="Collapsed"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions><ColumnDefinition Width="178"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="10">
                 <StackPanel>
@@ -113,11 +151,12 @@
                     <TextBlock x:Name="DestinationLabel" TextWrapping="Wrap" FontSize="11" Margin="6,0" Foreground="{DynamicResource AppForeground}"/>
                     <Separator Margin="8,16"/>
                     <TextBlock Text="Consejos" FontWeight="SemiBold" Margin="6,0,0,8"/>
-                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedForeground}" Margin="6,0" Text="Ctrl o Shift para seleccionar varios archivos. Doble clic para abrir carpetas. Las miniaturas se guardan para volver a mostrarse más rápido."/>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedForeground}" Margin="6,0" Text="Marca casillas para elegir varios archivos. Shift permite seleccionar intervalos. Arrastra archivos desde Windows para subir o desde aquí para descargarlos. Puedes generar todas las miniaturas sin desplazarte."/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="2" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10">
+            <Border Grid.Column="2" AllowDrop="True" DragOver="Explorer_DragOver" Drop="Explorer_Drop"
+                    Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <DockPanel Grid.Row="0" Margin="15,10">
@@ -131,6 +170,18 @@
                              VirtualizingPanel.VirtualizationMode="Recycling"
                              BorderThickness="0" Background="Transparent" Padding="8,0"
                              SelectionMode="Single">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
@@ -138,19 +189,32 @@
                     <DataGrid Grid.Row="1" x:Name="DetailsGrid" Visibility="Collapsed" BorderThickness="0" Margin="8,0"
                               AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended"
                               EnableRowVirtualization="True" EnableColumnVirtualization="True"
-                              SelectionChanged="Details_SelectionChanged" MouseDoubleClick="Details_DoubleClick">
+                              SelectionChanged="Details_SelectionChanged" MouseDoubleClick="Details_DoubleClick"
+                              PreviewMouseLeftButtonDown="Details_PreviewMouseDown" PreviewMouseMove="Details_PreviewMouseMove">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Nombre" Binding="{Binding Name}" Width="*"/>
                             <DataGridTextColumn Header="Tipo" Binding="{Binding TypeText}" Width="100"/>
                             <DataGridTextColumn Header="Tamaño" Binding="{Binding SizeText}" Width="100"/>
                             <DataGridTextColumn Header="Modificado" Binding="{Binding ModifiedText}" Width="150"/>
                         </DataGrid.Columns>
+                        <DataGrid.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource PanelBackground}" Padding="8,10">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
+                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </DataGrid.GroupStyle>
                     </DataGrid>
                 </Grid>
             </Border>
         </Grid>
 
-        <Border Grid.Row="3" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,10,0,0">
+        <Border Grid.Row="4" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,10,0,0">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                     <TextBlock Text="TRANSFERENCIAS" FontWeight="SemiBold" Foreground="{DynamicResource MutedForeground}" FontSize="11" Margin="6,0,16,6"/>

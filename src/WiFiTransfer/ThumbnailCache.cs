@@ -36,6 +36,17 @@ public sealed class ThumbnailCache
         return image;
     }
 
+    public async Task<bool> PrecacheAsync(FileEntry entry, FtpBackend backend, CancellationToken token)
+    {
+        // Autocarga en disco, sin retener miles de BitmapSource en memoria.
+        if (!entry.IsImage || (!entry.IsLocal && entry.Size > MaxRemoteThumbnailBytes)) return false;
+        var key = entry.IsLocal ? "local|" + entry.FullPath + "|" + entry.Size + "|" + entry.Modified.Ticks
+                                : backend.ServerKey + "|" + entry.FullPath + "|" + entry.Size + "|" + entry.Modified.Ticks;
+        var cacheFile = CachePath(key);
+        if (File.Exists(cacheFile) && new FileInfo(cacheFile).Length > 0) return true;
+        return await LoadAsync(entry, backend, token) is not null;
+    }
+
     public Task<ImageSource?> LoadAsync(FileEntry entry, FtpBackend backend, CancellationToken token)
     {
         if (!entry.IsImage) return Task.FromResult<ImageSource?>(null);

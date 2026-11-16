@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -48,6 +49,7 @@ public partial class MainWindow : Window
         TransfersList.ItemsSource = _jobs;
         DestinationLabel.Text = _destination;
         LoadSettings();
+        InitializeFeatures();
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RefreshView(); };
         _scrollTimer.Tick += (_, _) => { _scrollTimer.Stop(); RequestVisibleThumbnails(); };
         TileRowsList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(GridScrolled));
@@ -56,6 +58,7 @@ public partial class MainWindow : Window
         {
             _navigation.Cancel();
             _thumbCancellation.Cancel();
+            StopPreload();
             _ftp.Dispose();
         };
     }
@@ -134,6 +137,7 @@ public partial class MainWindow : Window
             var items = await _ftp.ListAsync(_remotePath, token);
             if (token.IsCancellationRequested) return;
             _entries = items.ToList();
+            RebuildDateFilters();
             RefreshView();
             SetStatus("Carpeta cargada: " + _entries.Count.ToString("N0") + " elementos.");
         }
@@ -176,6 +180,7 @@ public partial class MainWindow : Window
             }, token);
             if (token.IsCancellationRequested) return;
             _entries = items;
+            RebuildDateFilters();
             RefreshView();
             SetStatus(_entries.Count.ToString("N0") + " elementos en el computador.");
         }
@@ -185,6 +190,7 @@ public partial class MainWindow : Window
 
     private void ResetNavigation()
     {
+        StopPreload();
         _navigation.Cancel();
         _navigation.Dispose();
         _navigation = new CancellationTokenSource();
@@ -202,9 +208,18 @@ public partial class MainWindow : Window
 
     private void RefreshView()
     {
-        if (!IsLoaded || ViewCombo is null || SortCombo is null || SearchBox is null) return;
+        if (!IsLoaded || ViewCombo is null || SortCombo is null || SearchBox is null
+            || YearCombo is null || MonthCombo is null || GroupByMonthCheck is null) return;
+
         var search = SearchBox.Text.Trim();
-        var query = _entries.Where(x => search.Length == 0 || x.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        IEnumerable<FileEntry> query = _entries.Where(x =>
+            search.Length == 0 || x.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+
+        var selectedYear = SelectedYear;
+        var selectedMonth = SelectedMonth;
+        if (selectedYear > 0) query = query.Where(x => x.Modified.Year == selectedYear);
+        if (selectedMonth > 0) query = query.Where(x => x.Modified.Month == selectedMonth && x.Modified.Year >= 2000);
+
         var sorted = SortCombo.SelectedIndex switch
         {
             1 => query.OrderByDescending(x => x.IsDirectory).ThenByDescending(x => x.Modified).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase),
@@ -212,7 +227,15 @@ public partial class MainWindow : Window
             _ => query.OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
         };
         _visible = sorted.ToList();
-        CountLabel.Text = _visible.Count.ToString("N0") + " elementos";
+
+        // Group by chronological month, not alphabetical month name.
+        if (GroupMonths)
+        {
+            _visible = _visible.GroupBy(x => x.Modified.Year >= 2000
+                    ? new DateTime(x.Modified.Year, x.Modified.Month, 1) : DateTime.MinValue)
+                .OrderByDescending(g => g.Key)
+                .SelectMany(g => g).ToList();
+        }
 
         var mode = ViewCombo.SelectedIndex;
         TileWidth = mode switch { 0 => 208d, 1 => 175d, 2 => 144d, 3 => 108d, _ => 144d };
@@ -221,20 +244,51 @@ public partial class MainWindow : Window
         var detailed = mode is 4 or 5;
         DetailsGrid.Visibility = detailed ? Visibility.Visible : Visibility.Collapsed;
         TileRowsList.Visibility = detailed ? Visibility.Collapsed : Visibility.Visible;
+
         if (detailed)
         {
             for (var i = 1; i < DetailsGrid.Columns.Count; i++)
                 DetailsGrid.Columns[i].Visibility = mode == 4 ? Visibility.Collapsed : Visibility.Visible;
             DetailsGrid.HeadersVisibility = mode == 4 ? DataGridHeadersVisibility.None : DataGridHeadersVisibility.Column;
-            DetailsGrid.ItemsSource = _visible;
+            DetailsGrid.ItemsSource = null;
+            if (GroupMonths)
+            {
+                var view = CollectionViewSource.GetDefaultView(_visible);
+                if (view is ListCollectionView collection)
+                    collection.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FileEntry.MonthGroupKey)));
+                DetailsGrid.ItemsSource = view;
+            }
+            else DetailsGrid.ItemsSource = _visible;
+            UpdateSelectionCount();
             return;
         }
+
         DetailsGrid.ItemsSource = null;
         var columns = Math.Max(1, (int)(Math.Max(220, TileRowsList.ActualWidth - 26) / (TileWidth + 6)));
         var rows = new List<FileRow>();
-        for (var i = 0; i < _visible.Count; i += columns)
-            rows.Add(new FileRow { Files = _visible.Skip(i).Take(columns).ToList() });
+        if (GroupMonths)
+        {
+            var groups = _visible.GroupBy(x => x.Modified.Year >= 2000
+                ? new DateTime(x.Modified.Year, x.Modified.Month, 1) : DateTime.MinValue);
+            foreach (var group in groups)
+            {
+                var children = group.ToList();
+                for (var index = 0; index < children.Count; index += columns)
+                    rows.Add(new FileRow
+                    {
+                        Header = index == 0 ? children[index].MonthGroupKey + "  ·  " + children.Count.ToString("N0") + " elementos" : "",
+                        Files = children.Skip(index).Take(columns).ToList()
+                    });
+            }
+        }
+        else
+        {
+            for (var i = 0; i < _visible.Count; i += columns)
+                rows.Add(new FileRow { Files = _visible.Skip(i).Take(columns).ToList() });
+        }
+
         TileRowsList.ItemsSource = rows;
+        UpdateSelectionCount();
         _scrollTimer.Stop();
         _scrollTimer.Start();
     }
@@ -276,6 +330,7 @@ public partial class MainWindow : Window
             _lastClickedIndex = index;
         }
         SetStatus(_entries.Count(x => x.IsSelected) + " seleccionados.");
+        UpdateSelectionCount();
     }
 
     private async void FileTile_DoubleClick(object sender, MouseButtonEventArgs e)
@@ -283,6 +338,7 @@ public partial class MainWindow : Window
         if (sender is System.Windows.Controls.Button { Tag: FileEntry entry })
         {
             e.Handled = true;
+            if (OriginatesInCheckBox(e.OriginalSource as DependencyObject)) return;
             if (entry.IsDirectory) await OpenFolderAsync(entry);
             else if (entry.IsImage) await OpenPreviewAsync(entry);
         }
@@ -301,6 +357,7 @@ public partial class MainWindow : Window
     {
         foreach (var item in e.RemovedItems.OfType<FileEntry>()) item.IsSelected = false;
         foreach (var item in e.AddedItems.OfType<FileEntry>()) item.IsSelected = true;
+        UpdateSelectionCount();
     }
 
     private async Task OpenPreviewAsync(FileEntry entry)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
@@ -26,6 +27,15 @@ public sealed class FileEntry : INotifyPropertyChanged
     public bool IsPdf => !IsDirectory && Path.GetExtension(Name).Equals(".pdf", StringComparison.OrdinalIgnoreCase);
     public string TypeText => IsDirectory ? "Carpeta" : (Path.GetExtension(Name).TrimStart('.').ToUpperInvariant() is { Length: > 0 } ext ? ext : "Archivo");
     public string SizeText => IsDirectory ? "—" : FormatSize(Size);
+    public string MonthGroupKey
+    {
+        get
+        {
+            if (Modified.Year < 2000) return "Sin fecha";
+            var text = Modified.ToString("MMMM yyyy", CultureInfo.GetCultureInfo("es-CL"));
+            return char.ToUpperInvariant(text[0]) + text[1..];
+        }
+    }
     public string ModifiedText => Modified <= DateTime.MinValue.AddDays(1) ? "—" : Modified.ToString("dd-MM-yyyy HH:mm");
     public ImageSource? Thumbnail { get => _thumbnail; set { _thumbnail = value; Changed(); } }
     public bool IsSelected { get => _isSelected; set { _isSelected = value; Changed(); } }
@@ -49,6 +59,7 @@ public sealed class FileEntry : INotifyPropertyChanged
 
 public sealed class FileRow
 {
+    public string Header { get; init; } = "";
     public List<FileEntry> Files { get; init; } = [];
 }
 
