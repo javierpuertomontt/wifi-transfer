@@ -1,0 +1,34 @@
+name: Compilar WiFi Transfer (.exe)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restaurar dependencias
+        run: dotnet restore src/WiFiTransfer/WiFiTransfer.csproj
+      - name: Compilar y publicar un único EXE
+        shell: pwsh
+        run: |
+          dotnet publish src/WiFiTransfer/WiFiTransfer.csproj --configuration Release --runtime win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output dist
+          if (!(Test-Path "dist/WiFiTransfer.exe")) { throw "No se generó WiFiTransfer.exe" }
+      - name: Guardar EXE descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiFiTransfer-Windows-x64
+          path: dist/WiFiTransfer.exe
+          if-no-files-found: error
+          retention-days: 30

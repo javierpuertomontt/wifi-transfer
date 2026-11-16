@@ -1,0 +1,163 @@
+<Window x:Class="WiFiTransfer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WiFi Transfer · Explorador inalámbrico" Height="790" Width="1220"
+        MinWidth="900" MinHeight="620" WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBackground}" Foreground="{DynamicResource AppForeground}"
+        FontFamily="Segoe UI" FontSize="13">
+    <Window.Resources>
+        <DataTemplate x:Key="TileTemplate">
+            <Button Click="FileTile_Click" MouseDoubleClick="FileTile_DoubleClick" Loaded="FileTile_Loaded"
+                    Tag="{Binding}" Padding="4" Margin="3" Width="135" Height="146"
+                    Background="Transparent" BorderThickness="0" ToolTip="{Binding FullPath}">
+                <Border x:Name="TileOutline" CornerRadius="9" Padding="5" BorderBrush="Transparent" BorderThickness="2">
+                    <StackPanel>
+                        <Border Background="{DynamicResource PanelBackground}" CornerRadius="7" Height="97" ClipToBounds="True">
+                            <Grid>
+                                <TextBlock Text="{Binding Icon}" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" SnapsToDevicePixels="True"/>
+                            </Grid>
+                        </Border>
+                        <TextBlock Text="{Binding Name}" Margin="0,7,0,0" TextTrimming="CharacterEllipsis"
+                                   TextAlignment="Center" FontSize="11" Foreground="{DynamicResource AppForeground}"/>
+                    </StackPanel>
+                </Border>
+            </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="TileOutline" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <DataTemplate x:Key="RowTemplate">
+            <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource TileTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </DataTemplate>
+        <DataTemplate x:Key="TransferTemplate">
+            <Grid Margin="3,2">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="250"/><ColumnDefinition Width="*"/><ColumnDefinition Width="170"/></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Progress}" Height="8" Margin="12,0"/>
+                <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="{DynamicResource MutedForeground}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="150"/><ColumnDefinition Width="67"/>
+                    <ColumnDefinition Width="118"/><ColumnDefinition Width="124"/><ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                    <TextBlock Text="WiFi Transfer" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="Windows ↔ Xiaomi" FontSize="10" Foreground="{DynamicResource MutedForeground}"/>
+                </StackPanel>
+                <TextBox x:Name="HostBox" Grid.Column="1" VerticalAlignment="Center" ToolTip="IP del servidor FTP (por ejemplo 192.168.1.4)" Text="192.168.1.2"/>
+                <TextBox x:Name="PortBox" Grid.Column="2" VerticalAlignment="Center" Text="2121" ToolTip="Puerto FTP"/>
+                <TextBox x:Name="UserBox" Grid.Column="3" VerticalAlignment="Center" Text="android" ToolTip="Usuario FTP"/>
+                <PasswordBox x:Name="PassBox" Grid.Column="4" VerticalAlignment="Center" ToolTip="Contraseña (solo se guarda durante esta sesión)"/>
+                <CheckBox x:Name="FtpsCheck" Grid.Column="5" Content="FTPS" VerticalAlignment="Center" Margin="8,0"/>
+                <Button x:Name="ConnectButton" Grid.Column="6" Content="Conectar" FontWeight="SemiBold" Click="Connect_Click" Background="{DynamicResource AccentBrush}" Foreground="White" Padding="18,9"/>
+                <TextBlock x:Name="ConnectionStatus" Grid.Column="7" Text="Sin conexión" Foreground="{DynamicResource MutedForeground}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0"/>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="9" Margin="0,0,0,10">
+            <DockPanel LastChildFill="True">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button Content="← Atrás" Click="Up_Click"/>
+                    <Button Content="⟳ Actualizar" Click="Refresh_Click"/>
+                    <Button Content="↓ Descargar" Click="Download_Click" ToolTip="Descargar archivos seleccionados del Xiaomi"/>
+                    <Button Content="↑ Subir archivos" Click="Upload_Click" ToolTip="Enviar archivos de Windows al Xiaomi"/>
+                    <Button Content="Carpeta destino…" Click="Destination_Click"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <ComboBox x:Name="SortCombo" Width="102" Margin="4" SelectedIndex="0" SelectionChanged="Filter_Changed">
+                        <ComboBoxItem Content="Nombre"/><ComboBoxItem Content="Fecha"/><ComboBoxItem Content="Tamaño"/>
+                    </ComboBox>
+                    <ComboBox x:Name="ViewCombo" Width="150" Margin="4" SelectedIndex="2" SelectionChanged="Filter_Changed">
+                        <ComboBoxItem Content="Iconos muy grandes"/>
+                        <ComboBoxItem Content="Iconos grandes"/>
+                        <ComboBoxItem Content="Iconos medianos"/>
+                        <ComboBoxItem Content="Iconos pequeños"/>
+                        <ComboBoxItem Content="Lista"/>
+                        <ComboBoxItem Content="Detalles"/>
+                    </ComboBox>
+                </StackPanel>
+                <TextBox x:Name="SearchBox" Margin="8,4" MinWidth="130" TextChanged="Search_TextChanged" ToolTip="Filtrar archivos de esta carpeta"/>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="178"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="10">
+                <StackPanel>
+                    <TextBlock Text="EXPLORAR" FontWeight="SemiBold" Foreground="{DynamicResource MutedForeground}" Margin="7,8,0,12"/>
+                    <Button Content="📱 Xiaomi (FTP)" Click="Remote_Click" HorizontalContentAlignment="Left"/>
+                    <Button Content="💻 Este equipo" Click="Local_Click" HorizontalContentAlignment="Left"/>
+                    <Separator Margin="8,16"/>
+                    <TextBlock Text="CARPETA DE DESCARGAS" FontSize="10" Foreground="{DynamicResource MutedForeground}" Margin="6,0,0,6"/>
+                    <TextBlock x:Name="DestinationLabel" TextWrapping="Wrap" FontSize="11" Margin="6,0" Foreground="{DynamicResource AppForeground}"/>
+                    <Separator Margin="8,16"/>
+                    <TextBlock Text="Consejos" FontWeight="SemiBold" Margin="6,0,0,8"/>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedForeground}" Margin="6,0" Text="Ctrl o Shift para seleccionar varios archivos. Doble clic para abrir carpetas. Las miniaturas se guardan para volver a mostrarse más rápido."/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0" Margin="15,10">
+                        <TextBlock x:Name="PathLabel" Text="Conecta el Xiaomi o explora el PC" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="CountLabel" DockPanel.Dock="Right" Text="" VerticalAlignment="Center" Foreground="{DynamicResource MutedForeground}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <ListBox Grid.Row="1" x:Name="TileRowsList" ItemTemplate="{StaticResource RowTemplate}"
+                             ScrollViewer.CanContentScroll="True"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling"
+                             BorderThickness="0" Background="Transparent" Padding="8,0"
+                             SelectionMode="Single">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                    </ListBox>
+                    <DataGrid Grid.Row="1" x:Name="DetailsGrid" Visibility="Collapsed" BorderThickness="0" Margin="8,0"
+                              AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended"
+                              EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                              SelectionChanged="Details_SelectionChanged" MouseDoubleClick="Details_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Nombre" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Tipo" Binding="{Binding TypeText}" Width="100"/>
+                            <DataGridTextColumn Header="Tamaño" Binding="{Binding SizeText}" Width="100"/>
+                            <DataGridTextColumn Header="Modificado" Binding="{Binding ModifiedText}" Width="150"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="3" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,10,0,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                    <TextBlock Text="TRANSFERENCIAS" FontWeight="SemiBold" Foreground="{DynamicResource MutedForeground}" FontSize="11" Margin="6,0,16,6"/>
+                    <TextBlock x:Name="StatusLabel" Text="Listo." Foreground="{DynamicResource MutedForeground}" FontSize="11"/>
+                </StackPanel>
+                <ListBox x:Name="TransfersList" Height="78" BorderThickness="0" Background="Transparent" ItemTemplate="{StaticResource TransferTemplate}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
