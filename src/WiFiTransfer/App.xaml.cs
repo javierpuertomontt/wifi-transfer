@@ -22,7 +22,7 @@ public partial class App : System.Windows.Application
 
     private void OnPreferencesChanged(object? sender, UserPreferenceChangedEventArgs e)
     {
-        Dispatcher.BeginInvoke(ApplyTheme);
+        Dispatcher.BeginInvoke(new Action(ApplyTheme));
     }
 
     private void ApplyTheme()
@@ -45,7 +45,7 @@ public partial class App : System.Windows.Application
 
     private static SolidColorBrush Brush(string hex)
     {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        var brush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
         brush.Freeze();
         return brush;
     }

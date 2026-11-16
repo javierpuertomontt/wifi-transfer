@@ -236,7 +236,7 @@ public partial class MainWindow : Window
 
     private void FileTile_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: FileEntry entry }) return;
+        if (sender is not System.Windows.Controls.Button { Tag: FileEntry entry }) return;
         var index = _visible.IndexOf(entry);
         if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0 && _lastClickedIndex >= 0)
         {
@@ -260,7 +260,7 @@ public partial class MainWindow : Window
 
     private async void FileTile_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is Button { Tag: FileEntry { IsDirectory: true } entry })
+        if (sender is System.Windows.Controls.Button { Tag: FileEntry { IsDirectory: true } entry })
         {
             e.Handled = true;
             await OpenFolderAsync(entry);
@@ -324,7 +324,7 @@ public partial class MainWindow : Window
 
     private void FileTile_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: FileEntry entry }) QueueThumbnail(entry);
+        if (sender is System.Windows.Controls.Button { Tag: FileEntry entry }) QueueThumbnail(entry);
     }
 
     private void GridScrolled(object sender, ScrollChangedEventArgs e)
@@ -346,7 +346,7 @@ public partial class MainWindow : Window
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
         {
             var child = VisualTreeHelper.GetChild(root, i);
-            if (child is Button { Tag: FileEntry item } button && button.IsVisible) QueueThumbnail(item);
+            if (child is System.Windows.Controls.Button { Tag: FileEntry item } button && button.IsVisible) QueueThumbnail(item);
             else WalkTiles(child);
         }
     }
@@ -392,7 +392,7 @@ public partial class MainWindow : Window
                     await UploadEntryAsync(entry.FullPath, _remotePath, job, token));
             return;
         }
-        var dialog = new OpenFileDialog { Multiselect = true, Title = "Selecciona los archivos para enviar al Xiaomi" };
+        var dialog = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "Selecciona los archivos para enviar al Xiaomi" };
         if (dialog.ShowDialog(this) != true) return;
         foreach (var file in dialog.FileNames)
             ScheduleTransfer(Path.GetFileName(file), "Subiendo", async (job, token) =>
