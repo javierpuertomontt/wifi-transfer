@@ -314,7 +314,7 @@ public partial class MainWindow : Window
         {
             Text = entry.Name + "   ·   " + entry.SizeText,
             Margin = new Thickness(18, 12, 18, 0), FontSize = 15,
-            Foreground = (Brush)System.Windows.Application.Current.Resources["AppForeground"]
+            Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["AppForeground"]
         };
         DockPanel.SetDock(title, Dock.Top);
         panel.Children.Add(title);
@@ -323,7 +323,7 @@ public partial class MainWindow : Window
         {
             Title = "Vista previa · " + entry.Name, Owner = this, Width = 1000, Height = 690,
             MinWidth = 520, MinHeight = 350, WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = (Brush)System.Windows.Application.Current.Resources["AppBackground"],
+            Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["AppBackground"],
             Content = panel
         };
         viewer.Show();
